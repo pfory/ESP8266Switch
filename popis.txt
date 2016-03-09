@@ -1,0 +1,7 @@
+HW
+- ESP8266 - OK
+- Relé 3V - OK
+- AC-DC 230/3.3V - objednáno 17.1.2016
+- LED - OK
+- odpor pro LED - OK
+- krabice pro zásuvku - OK
