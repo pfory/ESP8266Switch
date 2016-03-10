@@ -1,5 +1,6 @@
 --Init  
 base = "/home/1/esp01/p1/"
+deviceID = "ESP8266 Switch "..node.chipid()
 
 wifi.setmode(wifi.STATION)
 wifi.sta.config("Datlovo","Nu6kMABmseYwbCoJ7LyG")
@@ -26,12 +27,12 @@ end
 
 function mqtt_sub()  
   m:subscribe(base.."com",0, function(conn)   
-    print("Mqtt Subscribed to OpenHAB feed for device Switch1")  
+    print("Mqtt Subscribed to OpenHAB feed for device "..deviceID)  
   end)  
 end  
 
-m = mqtt.Client("ESP8266 Switch1", 180, "datel", "hanka12")  
-m:lwt("/lwt", "ESP8266", 0, 0)  
+m = mqtt.Client(deviceID, 180, "datel", "hanka12")  
+m:lwt("/lwt", deviceID, 0, 0)  
 m:on("offline", function(con)   
   print("Mqtt Reconnecting...")   
   tmr.alarm(1, 10000, 1, function()  
