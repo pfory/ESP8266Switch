@@ -4,6 +4,7 @@ deviceID = "ESP8266 Switch "..node.chipid()
 
 wifi.setmode(wifi.STATION)
 wifi.sta.config("Datlovo","Nu6kMABmseYwbCoJ7LyG")
+wifi.sta.autoconnect(1)
 
 Broker="88.146.202.186"  
 
@@ -39,6 +40,12 @@ m:on("offline", function(con)
     reconnect()
   end)
 end)  
+
+
+tmr.alarm(2, 10000, 1, function()  
+  print(node.heap())
+end)
+
 
  -- on publish message receive event  
 m:on("message", function(conn, topic, data)   
