@@ -1,5 +1,5 @@
 --Init  
-base = "/home/1/esp01/p1/"
+base = "/home/Switch1/"
 deviceID = "ESP8266 Switch "..node.chipid()
 
 wifi.setmode(wifi.STATION)
@@ -8,7 +8,9 @@ wifi.sta.autoconnect(1)
 
 Broker="88.146.202.186"  
 
-pinRelay = 3 --GPIO0
+heartBeat = node.bootreason()
+
+pinRelay = 4 --GPIO2
 gpio.mode(pinRelay,gpio.OUTPUT)  
 gpio.write(pinRelay,gpio.LOW)  
 
@@ -27,7 +29,7 @@ end
 
 
 function mqtt_sub()  
-  m:subscribe(base.."com",0, function(conn)   
+  m:subscribe(base.."p1/com",0, function(conn)   
     print("Mqtt Subscribed to OpenHAB feed for device "..deviceID)  
   end)  
 end  
@@ -42,15 +44,19 @@ m:on("offline", function(con)
 end)  
 
 
-tmr.alarm(2, 10000, 1, function()  
-  print(node.heap())
-end)
+function sendData()
+  print("I am sending data to OpenHab")
+  m:publish(base.."HeartBeat",   heartBeat,0,0)
+  if heartBeat==0 then heartBeat=1
+  else heartBeat=0
+  end
+end
 
 
  -- on publish message receive event  
 m:on("message", function(conn, topic, data)   
   print("Received:" .. topic .. ":" .. data) 
-  if topic == "/home/1/esp01/p1/com" then
+  if topic == base.."p1/com" then
     if data == "ON" then
       print("Relay ON")
       gpio.write(pinRelay,gpio.HIGH)  
@@ -67,17 +73,12 @@ tmr.alarm(0, 1000, 1, function()
     print ("Wifi connected")
     tmr.stop(0) 
     m:connect(Broker, 31883, 0, function(conn) 
-      -- sntp.sync('217.31.202.100',
-        -- function(sec,usec,server)
-          -- print('sync', sec, usec, server)
-        -- end,
-        -- function()
-         -- print('failed!')
-        -- end
-      -- )
       mqtt_sub() --run the subscription function 
       print(wifi.sta.getip())
       print("Mqtt Connected to:" .. Broker.." - "..base) 
+      tmr.alarm(2, 60000, 1, function()  
+        sendData()
+      end)
     end) 
   end
 end)
