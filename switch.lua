@@ -10,7 +10,6 @@ Broker="88.146.202.186"
 
 heartBeat = node.bootreason() + 10
 
-
 versionSW         = 0.4
 versionSWString   = "Switch v" 
 print(versionSWString .. versionSW)
@@ -52,6 +51,7 @@ end)
 function sendData()
   print("I am sending data to OpenHab")
   m:publish(base.."HeartBeat",   heartBeat,0,0)
+  m:publish(base.."VersionSW",   versionSW,0,0)  
   if heartBeat==0 then heartBeat=1
   else heartBeat=0
   end

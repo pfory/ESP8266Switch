@@ -8,7 +8,7 @@ wifi.sta.autoconnect(1)
 
 Broker="88.146.202.186"  
 
-versionSW             = "0.1"
+versionSW             = "0.41"
 versionSWString       = "Switch v" 
 print(versionSWString .. versionSW)
 
@@ -53,14 +53,14 @@ end
 
 m = mqtt.Client(deviceID, 180, "datel", "hanka12")  
 m:lwt("/lwt", deviceID, 0, 0)  
-m:on("offline", function(con)   
+m:on("offline", function(conn)   
   print("Mqtt Reconnecting...")   
   tmr.alarm(1, 10000, 1, function()  
     reconnect()
   end)
 end)  
 
- -- on publish message receive event  
+-- on publish message receive event  
 m:on("message", function(conn, topic, data)   
   print("Received:" .. topic .. ":" .. data) 
   if topic == base.."com" then
