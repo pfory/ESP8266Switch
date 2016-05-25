@@ -49,6 +49,8 @@ function mqtt_sub()
   m:subscribe(base.."com",0, function(conn)   
     print("Mqtt Subscribed to OpenHAB feed for device "..deviceID)  
   end)  
+  m:subscribe(base.."comres",0, function(conn)   
+  end)  
 end  
 
 m = mqtt.Client(deviceID, 180, "datel", "hanka12")  
@@ -72,6 +74,12 @@ m:on("message", function(conn, topic, data)
       gpio.write(pinRelay,gpio.LOW)  
     end
   end
+  if topic == base.."comres" then
+    if data == "ON" then
+      print("Restarting ESP, bye.")
+      node.restart()
+    end
+  end
 end)  
 
 uart.write(0,"Connecting to Wifi")
@@ -84,7 +92,7 @@ tmr.alarm(0, 1000, 1, function()
       mqtt_sub() --run the subscription function 
       print(wifi.sta.getip())
       print("Mqtt Connected to:" .. Broker.." - "..base) 
-      m:publish(base.."VersionSW",              versionSW,0,0)  
+      m:publish(base.."VersionSW", versionSW,0,0)  
       sendHB()
       tmr.alarm(2, 60000, 1, function()  
         sendHB()
