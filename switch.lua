@@ -12,6 +12,7 @@ cfg={
   netmask = "255.255.255.0",
   gateway = "192.168.1.1"
 }
+wifi.sta.setip(cfg)
 wifi.sta.autoconnect(1)
 
 Broker="88.146.202.186"  
