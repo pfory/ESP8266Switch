@@ -5,19 +5,10 @@ deviceID = "ESP8266 Switch "..node.chipid()
 heartBeat = node.bootreason() + 10
 print("Boot reason:"..heartBeat)
 
-wifi.setmode(wifi.STATION)
-wifi.sta.config("Datlovo","Nu6kMABmseYwbCoJ7LyG")
-cfg={
-  ip = "192.168.1.154",
-  netmask = "255.255.255.0",
-  gateway = "192.168.1.1"
-}
-wifi.sta.setip(cfg)
-wifi.sta.autoconnect(1)
+--Broker="88.146.202.186"  
+Broker="192.168.1.56"
 
-Broker="88.146.202.186"  
-
-versionSW         = 0.4
+versionSW         = 0.52
 versionSWString   = "Switch v" 
 print(versionSWString .. versionSW)
 
@@ -30,7 +21,7 @@ function reconnect()
   if wifi.sta.status() == 5 and wifi.sta.getip() ~= nil then 
     print ("Wifi Up!")
     tmr.stop(1) 
-    m:connect(Broker, 31883, 0, 1, function(conn) 
+    m:connect(Broker, 1883, 0, 1, function(conn) 
       print(wifi.sta.getip())
       print("Mqtt Connected to:" .. Broker) 
       mqtt_sub() --run the subscription function 
@@ -81,20 +72,12 @@ m:on("message", function(conn, topic, data)
   end
 end)  
 
-uart.write(0,"Connecting to Wifi")
-tmr.alarm(0, 1000, 1, function() 
-  uart.write(0,".")
-  if wifi.sta.status() == 5 and wifi.sta.getip() ~= nil then 
-    print ("Wifi connected")
-    tmr.stop(0) 
-    m:connect(Broker, 31883, 0, 1, function(conn) 
-      mqtt_sub() --run the subscription function 
-      print(wifi.sta.getip())
-      print("Mqtt Connected to:" .. Broker.." - "..base) 
-      sendData()
-      tmr.alarm(2, 60000, 1, function()  
-        sendData()
-      end)
-    end) 
-  end
-end)
+m:connect(Broker, 1883, 0, 1, function(conn) 
+  mqtt_sub() --run the subscription function 
+  print(wifi.sta.getip())
+  print("Mqtt Connected to:" .. Broker.." - "..base) 
+  sendData()
+  tmr.alarm(2, 60000, 1, function()  
+    sendData()
+  end)
+end) 
