@@ -61,12 +61,14 @@ m:on("message", function(conn, topic, data)
   if topic == base.."com" then
     if data == "ON" then
       print("Relay ON")
+      m:publish(base.."state", "ON",0,0)
       gpio.write(pinRelay,gpio.HIGH)  
       tmr.alarm(5, 3600000, 1, function()  --safety function
         gpio.write(pinRelay,gpio.LOW)  
       end)
     else
       print("Relay OFF")
+      m:publish(base.."state", "OFF",0,0)
       gpio.write(pinRelay,gpio.LOW)  
     end
   end

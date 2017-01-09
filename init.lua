@@ -2,8 +2,7 @@ wifi.setmode(wifi.STATION)
 wifi.sta.config("Datlovo","Nu6kMABmseYwbCoJ7LyG")   ---   SSID and Password for your LAN DHCP here
 
 cfg={
-  --ip = "192.168.1.154", halogen
-  ip = "192.168.1.157", --venkovni chata
+  ip = "192.168.1.140", --modul
   netmask = "255.255.255.0",
   gateway = "192.168.1.1"
 }
@@ -27,9 +26,7 @@ tmr.alarm(0, 1000, 1, function()
     remaining, used, total=file.fsinfo()
     print("\nFile system info:\nTotal : "..total.." Bytes\nUsed : "..used.." Bytes\nRemain: "..remaining.." Bytes")
     print("\nReady")
-    dofile("servernode.lua")    --  calls servernode.lua  
-    --dofile("switch.lua")    --  calls servernode.lua  
-    dofile("switch2.lua")    --  calls servernode.lua  
+    dofile("switch3.lua")      
   end
 end)
 
