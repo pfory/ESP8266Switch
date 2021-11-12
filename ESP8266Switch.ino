@@ -1,176 +1,238 @@
-#include <ESP8266WiFi.h>
-#include <WiFiClient.h>
-#include "Adafruit_MQTT.h"
-#include "Adafruit_MQTT_Client.h"
+//ESP8266-01
+//spinac rele
 
-const char *ssid = "Datlovo";
-const char *password = "Nu6kMABmseYwbCoJ7LyG";
+#include "Configuration.h"
 
-#define AIO_SERVER      "192.168.1.56"
-#define AIO_SERVERPORT  1883
-#define AIO_USERNAME    "datel"
-#define AIO_KEY         "hanka12"
+//for LED status
+Ticker ticker;
 
-WiFiClient client;
+auto timer = timer_create_default(); // create a timer with default settings
+Timer<> default_timer; // save as above
 
-byte heartBeat = 10;
-byte status    = 0;
+DoubleResetDetector drd(DRD_TIMEOUT, DRD_ADDRESS);
 
-Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
 
-unsigned int const sendTimeDelay=60000;
-signed long lastSendTime = sendTimeDelay * -1;
-
-/****************************** Feeds ***************************************/
-Adafruit_MQTT_Publish switchVersionSW = Adafruit_MQTT_Publish(&mqtt, "/home/Switch1/esp03/VersionSW");
-Adafruit_MQTT_Publish switchHeartBeat = Adafruit_MQTT_Publish(&mqtt, "/home/Switch1/esp03/HeartBeat");
-Adafruit_MQTT_Publish switchStatus    = Adafruit_MQTT_Publish(&mqtt, "/home/Switch1/esp03/Status");
-
-Adafruit_MQTT_Subscribe com           = Adafruit_MQTT_Subscribe(&mqtt, "/home/Switch1/esp03/com");
-Adafruit_MQTT_Subscribe restart       = Adafruit_MQTT_Subscribe(&mqtt, "/home/Switch1/esp03/restart");
-
-#define SERIALSPEED 115200
-
-#define relayPin 2
-
-void MQTT_connect(void);
-
-float versionSW                   = 0.1;
-String versionSWString            = "Switch v";
-
-void setup() {
-  Serial.begin(SERIALSPEED);
-  Serial.print(versionSWString);
-  Serial.println(versionSW);
-  pinMode(relayPin, OUTPUT);
-  
-  Serial.println(ESP.getResetReason());
-  if (ESP.getResetReason()=="Software/System restart") {
-    heartBeat=11;
-  } else if (ESP.getResetReason()=="Power on") {
-    heartBeat=12;
-  } else if (ESP.getResetReason()=="External System") {
-    heartBeat=13;
-  } else if (ESP.getResetReason()=="Hardware Watchdog") {
-    heartBeat=14;
-  } else if (ESP.getResetReason()=="Exception") {
-    heartBeat=15;
-  } else if (ESP.getResetReason()=="Software Watchdog") {
-    heartBeat=16;
-  } else if (ESP.getResetReason()=="Deep-Sleep Wake") {
-    heartBeat=17;
-  }
-  
-  WiFi.begin(ssid, password);
-
-	// Wait for connection
-	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
-		Serial.print(".");
-	}
-
-	Serial.println("");
-	Serial.print("Connected to ");
-	Serial.println(ssid);
-	Serial.print("IP address: ");
-	Serial.println(WiFi.localIP());
-  
-  mqtt.subscribe(&com);
-  mqtt.subscribe(&restart);
+void tick()
+{
+  //toggle state
+  int state = digitalRead(STATUSLED);  // get the current state of GPIO1 pin
+  digitalWrite(STATUSLED, !state);     // set pin to the opposite state
 }
 
-void loop() {
-  // Ensure the connection to the MQTT server is alive (this will make the first
-  // connection and automatically reconnect when disconnected).  See the MQTT_connect
-  // function definition further below.
-  MQTT_connect();
+uint32_t heartBeat                    = 0;
 
-  Adafruit_MQTT_Subscribe *subscription;
-  while ((subscription = mqtt.readSubscription(5000))) {
-    if (subscription == &com) {
-      Serial.print(F("got: "));
-      Serial.println((char *)com.lastread);
-      if (strcmp((char *)com.lastread, "OFF") == 0) {
-        digitalWrite(relayPin, HIGH); // make GPIO2 output low
-        Serial.println("Relay OFF");
-        status = 0;
-      } else {
-        digitalWrite(relayPin, LOW); // make GPIO2 output low
-        Serial.println("Relay ON");
-        status = 1;
-      }
-      if (! switchStatus.publish(status)) {
-        Serial.println("failed");
-      } else {
-        Serial.println("OK!");
-      }
+//gets called when WiFiManager enters configuration mode
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+  //if you used auto generated SSID, print it
+  Serial.println(myWiFiManager->getConfigPortalSSID());
+  //entered config mode, make led toggle faster
+  ticker.attach(0.2, tick);
+}
+
+
+//MQTT callback
+void callback(char* topic, byte* payload, unsigned int length) {
+  char * pEnd;
+  long int valL;
+  String val =  String();
+  DEBUG_PRINT("Message arrived [");
+  DEBUG_PRINT(topic);
+  DEBUG_PRINT("] ");
+  for (int i=0;i<length;i++) {
+    DEBUG_PRINT((char)payload[i]);
+    val += (char)payload[i];
+  }
+  DEBUG_PRINTLN();
+  
+  if (strcmp(topic, (String(mqtt_base) + "/" + String(mqtt_topic_restart)).c_str())==0) {
+    DEBUG_PRINT("RESTART");
+    ESP.restart();
+  } else if (strcmp(topic, (String(mqtt_base) + "/" + String(mqtt_topic_netinfo)).c_str())==0) {
+    DEBUG_PRINT("NET INFO");
+    sendNetInfoMQTT();
+  } else if (strcmp(topic, (String(mqtt_base) + "/" + String(mqtt_topic_set)).c_str())==0) {
+    DEBUG_PRINT("SET ");
+    if (val=="0") {
+      DEBUG_PRINT("OFF");
+      digitalWrite(RELE,0);
+    } else {
+      DEBUG_PRINT("ON");
+      digitalWrite(RELE,1);
     }
-    if (subscription == &restart) {
-      char *pNew = (char *)restart.lastread;
-      uint32_t pPassw=atol(pNew); 
-      if (pPassw==650419) {
-        Serial.print(F("Restart ESP now!"));
-        ESP.restart();
-      } else {
-        Serial.print(F("Wrong password."));
-      }
+    sendStatus();
+  }
+}
+
+
+ADC_MODE(ADC_VCC);
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+void setup(void) {
+  SERIAL_BEGIN;
+  DEBUG_PRINT(F(SW_NAME));
+  DEBUG_PRINT(F(" "));
+  DEBUG_PRINTLN(F(VERSION));
+  pinMode(RELE, OUTPUT);
+
+  ticker.attach(1, tick);
+  
+  WiFiManager wifiManager;
+  
+  //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
+  wifiManager.setAPCallback(configModeCallback);
+  wifiManager.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT);
+  wifiManager.setConnectTimeout(CONNECT_TIMEOUT);
+
+  if (drd.detectDoubleReset()) {
+    DEBUG_PRINTLN("Double reset detected, starting config portal...");
+    ticker.attach(0.2, tick);
+    if (!wifiManager.startConfigPortal(HOSTNAMEOTA)) {
+      DEBUG_PRINTLN("failed to connect and hit timeout");
+      delay(3000);
+      //reset and try again, or maybe put it to deep sleep
+      ESP.reset();
+      delay(5000);
     }
   }
-
- if (millis() - lastSendTime >= sendTimeDelay) {
-    lastSendTime = millis();
-    if (! switchHeartBeat.publish(heartBeat++)) {
-      Serial.println("failed");
-    } else {
-      Serial.println("OK!");
-    }
-    if (heartBeat>1) {
-      heartBeat=0;
-    }
-    if (! switchVersionSW.publish(versionSW)) {
-      Serial.println("failed");
-    } else {
-      Serial.println("OK!");
-    }
-    if (! switchStatus.publish(status)) {
-      Serial.println("failed");
-    } else {
-      Serial.println("OK!");
-    }
-  }
-  // ping the server to keep the mqtt connection alive
-  // NOT required if you are publishing once every KEEPALIVE seconds
+  
+  rst_info *_reset_info = ESP.getResetInfoPtr();
+  uint8_t _reset_reason = _reset_info->reason;
+  DEBUG_PRINT("Boot-Mode: ");
+  DEBUG_PRINTLN(_reset_reason);
+  heartBeat = _reset_reason;
+      
   /*
-  if(! mqtt.ping()) {
-    mqtt.disconnect();
-  }
+  REASON_DEFAULT_RST             = 0      normal startup by power on 
+  REASON_WDT_RST                 = 1      hardware watch dog reset 
+  REASON_EXCEPTION_RST           = 2      exception reset, GPIO status won't change 
+  REASON_SOFT_WDT_RST            = 3      software watch dog reset, GPIO status won't change 
+  REASON_SOFT_RESTART            = 4      software restart ,system_restart , GPIO status won't change 
+  REASON_DEEP_SLEEP_AWAKE        = 5      wake up from deep-sleep 
+  REASON_EXT_SYS_RST             = 6      external system reset 
   */
+  
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
 
+  WiFi.printDiag(Serial);
+
+  if (!wifiManager.autoConnect(AUTOCONNECTNAME, AUTOCONNECTPWD)) { 
+    DEBUG_PRINTLN("failed to connect and hit timeout");
+    delay(3000);
+    //reset and try again, or maybe put it to deep sleep
+    ESP.reset();
+    delay(5000);
+  } 
+
+  sendNetInfoMQTT();
+  
+#ifdef ota
+  ArduinoOTA.setHostname(HOSTNAMEOTA);
+
+  ArduinoOTA.onStart([]() {
+    DEBUG_PRINTLN("Start updating ");
+  });
+  ArduinoOTA.onEnd([]() {
+   DEBUG_PRINTLN("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    DEBUG_PRINTF("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    DEBUG_PRINTF("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+  ArduinoOTA.begin();
+#endif
+
+  void * a;
+  timer.every(SEND_DELAY, sendDataMQTT);
+  timer.every(SENDSTAT_DELAY, sendStatisticMQTT);
+  sendStatisticMQTT(a);
+  ticker.detach();
 }
 
-// Function to connect and reconnect as necessary to the MQTT server.
-// Should be called in the loop function and it will take care if connecting.
-void MQTT_connect() {
-  int8_t ret;
+void loop(void) {
+  timer.tick(); // tick the timer
+#ifdef ota
+  ArduinoOTA.handle();
+  reconnect();
+  client.loop();
+#endif
+}
 
-  // Stop if already connected.
-  if (mqtt.connected()) {
-    return;
+bool sendStatisticMQTT(void *) {
+  DEBUG_PRINTLN(F(" - I am sending statistic"));
+
+  SenderClass sender;
+  sender.add("VersionSW", VERSION);
+  sender.add("HeartBeat", heartBeat++);
+  sender.add("RSSI",      WiFi.RSSI());
+  sender.add("Voltage",   ESP.getVcc());
+  
+  DEBUG_PRINTLN(F("Calling MQTT"));
+  
+  sender.sendMQTT(mqtt_server, mqtt_port, mqtt_username, mqtt_key, mqtt_base);
+  return true;
+}
+
+bool sendDataMQTT(void *) {
+  SenderClass sender;
+  sender.sendMQTT(mqtt_server, mqtt_port, mqtt_username, mqtt_key, mqtt_base);
+  return true;
+}
+
+void sendNetInfoMQTT() {
+  digitalWrite(BUILTIN_LED, LOW);
+  //printSystemTime();
+  DEBUG_PRINTLN(F("Net info"));
+
+  SenderClass sender;
+  sender.add("IP",              WiFi.localIP().toString().c_str());
+  sender.add("MAC",             WiFi.macAddress());
+  
+  DEBUG_PRINTLN(F("Calling MQTT"));
+  
+  sender.sendMQTT(mqtt_server, mqtt_port, mqtt_username, mqtt_key, mqtt_base);
+  digitalWrite(BUILTIN_LED, HIGH);
+  return;
+}
+
+void sendStatus(void) {
+  DEBUG_PRINTLN(F(" - I am sending status"));
+
+  SenderClass sender;
+  sender.add("status", digitalRead(RELE));
+  DEBUG_PRINTLN(F("Calling MQTT"));
+  
+  sender.sendMQTT(mqtt_server, mqtt_port, mqtt_username, mqtt_key, mqtt_base);
+}
+
+
+
+void reconnect() {
+  // Loop until we're reconnected
+  if (!client.connected()) {
+    if (lastConnectAttempt == 0 || lastConnectAttempt + connectDelay < millis()) {
+      DEBUG_PRINT("Attempting MQTT connection...");
+      // Attempt to connect
+      if (client.connect(mqtt_base, mqtt_username, mqtt_key)) {
+        DEBUG_PRINTLN("connected");
+        // Once connected, publish an announcement...
+        client.subscribe((String(mqtt_base) + "/#").c_str());
+      } else {
+        lastConnectAttempt = millis();
+        DEBUG_PRINT("failed, rc=");
+        DEBUG_PRINTLN(client.state());
+      }
+    }
   }
-
-  Serial.print("Connecting to MQTT... ");
-
-  uint8_t retries = 3;
-  while ((ret = mqtt.connect()) != 0) { // connect will return 0 for connected
-       Serial.println(mqtt.connectErrorString(ret));
-       Serial.println("Retrying MQTT connection in 5 seconds...");
-       mqtt.disconnect();
-       delay(5000);  // wait 5 seconds
-       retries--;
-       if (retries == 0) {
-         // basically die and wait for WDT to reset me
-         while (1);
-       }
-  }
-  Serial.println("MQTT Connected!");
 }
